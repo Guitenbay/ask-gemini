@@ -6,9 +6,18 @@ from loguru import logger
 from ask_gemini.config import GeminiCookies, ProxyConfig
 
 
+class _ChatSession:
+    """Wraps a gemini-webapi ChatSession with model tracking."""
+
+    def __init__(self, session, model: str):
+        self.session = session
+        self.model = model
+
+
 class GeminiClientWrapper:
     def __init__(self):
         self._client: GeminiClient | None = None
+        self._chat: _ChatSession | None = None
 
     async def init(self) -> None:
         if not GeminiCookies.is_configured():
@@ -23,6 +32,37 @@ class GeminiClientWrapper:
         )
         await self._client.init(timeout=30, auto_close=False, auto_refresh=True)
         logger.debug("Gemini client initialized")
+
+    async def start_chat(self, model: str) -> None:
+        """Start or reset the chat session with the given model."""
+        chat = self._client.start_chat(model=model)
+        self._chat = _ChatSession(chat, model)
+        logger.debug(f"Chat session started with model={model}")
+
+    def has_chat(self) -> bool:
+        return self._chat is not None
+
+    async def chat(self, message: str, model: str) -> str:
+        """Send a message in the active chat session."""
+        if not self._chat:
+            await self.start_chat(model)
+        elif self._chat.model != model:
+            await self.start_chat(model)
+
+        resp = await self._chat.session.send_message(message)
+        return resp.text
+
+    async def chat_stream(self, message: str, model: str) -> AsyncIterator[str]:
+        """Send a message with streaming in the active chat session."""
+        if not self._chat:
+            await self.start_chat(model)
+        elif self._chat.model != model:
+            await self.start_chat(model)
+
+        session = self._chat.session
+        async for chunk in session.send_message_stream(message):
+            if chunk.text_delta:
+                yield chunk.text_delta
 
     async def _refresh_and_retry(self, error: Exception) -> bool:
         """On auth error, reload cookies from browser and reconnect."""

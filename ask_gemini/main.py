@@ -40,17 +40,18 @@ DEFAULT_MODEL = "gemini-3-pro"
     default=False,
     help="Wait for full response before printing",
 )
+@click.option(
+    "--chat",
+    is_flag=True,
+    default=False,
+    help="Enter interactive chat mode (remembers conversation history)",
+)
 @click.option("--cookie-setup", is_flag=True, help="Print cookie setup instructions")
 @click.version_option(version="0.1.0")
-def main(prompt, model, stream, no_stream, cookie_setup):
+def main(prompt, model, stream, no_stream, chat, cookie_setup):
     """Ask Gemini from the terminal."""
     if cookie_setup:
         print(GeminiCookies.setup_instructions())
-        return
-
-    if not prompt:
-        click.echo("Usage: ask-gemini <your question>")
-        click.echo("Run `ask-gemini --help` for options.")
         return
 
     if no_stream:
@@ -62,7 +63,6 @@ def main(prompt, model, stream, no_stream, cookie_setup):
         click.echo(f"Available models: {', '.join(AVAILABLE_MODELS)}")
         raise SystemExit(1)
 
-    # Try loading cookies from browser first
     GeminiCookies.try_load_from_browser()
 
     if not GeminiCookies.is_configured():
@@ -71,7 +71,16 @@ def main(prompt, model, stream, no_stream, cookie_setup):
         raise SystemExit(1)
 
     client = GeminiClientWrapper()
-    asyncio.run(_run(client, prompt, model, stream))
+
+    if chat:
+        asyncio.run(_run_chat(client, model, stream))
+    elif prompt:
+        asyncio.run(_run(client, prompt, model, stream))
+    else:
+        click.echo("Usage: ask-gemini <your question>")
+        click.echo("  ask-gemini --chat          Interactive chat mode")
+        click.echo("  ask-gemini --help           Show all options")
+        raise SystemExit(0)
 
 
 async def _run(client, prompt, model, stream):
@@ -91,6 +100,55 @@ async def _run(client, prompt, model, stream):
     else:
         resp = await client.ask(prompt, model)
         click.echo(resp)
+
+
+async def _run_chat(client, model, stream):
+    try:
+        await client.init()
+    except RuntimeError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1) from e
+
+    await client.start_chat(model)
+
+    click.echo(
+        f"Chat mode (model: {model}). Type 'exit' or 'quit' to leave, 'clear' to reset history.\n"
+    )
+
+    try:
+        import readline  # noqa: F401 — enables line editing/history on macOS/Linux
+    except ImportError:
+        pass
+
+    while True:
+        try:
+            text = input("You> ")
+        except EOFError:
+            click.echo()
+            break
+
+        text = text.strip()
+        if not text:
+            continue
+        if text.lower() in ("exit", "quit"):
+            break
+        if text.lower() == "clear":
+            await client.start_chat(model)
+            click.echo("Conversation cleared.\n")
+            continue
+
+        click.echo("Gemini> ", nl=False)
+
+        if stream:
+            first = True
+            async for chunk in client.chat_stream(text, model):
+                if first:
+                    first = False
+                click.echo(chunk, nl=False)
+            click.echo("\n")
+        else:
+            resp = await client.chat(text, model)
+            click.echo(f"{resp}\n")
 
 
 if __name__ == "__main__":
