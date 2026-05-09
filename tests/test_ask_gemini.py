@@ -184,6 +184,36 @@ def test_chat_mode_stdin():
     assert "gemini>" in result.stdout.lower() or "test user" in result.stdout.lower()
 
 
+# --- Stdin / pipe mode tests ---
+
+
+def test_stdin_pipe_input():
+    """When stdin is piped, use it as the prompt."""
+    result = _run(input="What is 2+2? Reply with just the number.")
+    assert result.returncode == 0, f"CLI failed: {result.stderr}"
+    assert "4" in result.stdout
+
+
+def test_stdin_pipe_with_session():
+    """Stdin pipe with a named session should work."""
+    session = f"{TEST_SESSION_PREFIX}stdin-session"
+    result1 = _run("--session", session, input="My test word is PEAR. Remember it.")
+    assert result1.returncode == 0, f"First call failed: {result1.stderr}"
+
+    result2 = _run("--session", session, input="What was my test word?")
+    assert result2.returncode == 0, f"Second call failed: {result2.stderr}"
+    assert "pear" in result2.stdout.lower(), (
+        f"Context not remembered. Response: {result2.stdout}"
+    )
+
+
+def test_stdin_pipe_with_model():
+    """Stdin pipe with model flag should work."""
+    result = _run("-m", "gemini-3-flash", input="Say 'pipe test ok'.")
+    assert result.returncode == 0, f"CLI failed: {result.stderr}"
+    assert "pipe" in result.stdout.lower() or "ok" in result.stdout.lower()
+
+
 # --- Help and version ---
 
 
