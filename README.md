@@ -9,22 +9,38 @@ CLI tool to chat with Gemini's web interface from the terminal. No API key neede
 
 ## Setup
 
-### Option A: Standalone executable (recommended)
-
-Build a single binary that runs without Python installed:
+### Option A: Install via pip (recommended)
 
 ```bash
+pip install ask-gemini
+```
+
+Available on [PyPI](https://pypi.org/project/ask-gemini/).
+
+### Option B: Download standalone executable
+
+Download the latest macOS executable from [GitHub Releases](https://github.com/Guitenbay/ask-gemini/releases):
+
+```bash
+# Download from the latest release asset at https://github.com/Guitenbay/ask-gemini/releases
+chmod +x ask-gemini
+./ask-gemini "Hello!"
+```
+
+No Python installation required.
+
+### Option C: Build from source
+
+```bash
+git clone https://github.com/Guitenbay/ask-gemini.git
 cd ask-gemini
 pip install pyinstaller
 bash build.sh
 ```
 
-The executable is at `dist/ask-gemini` (~21MB). You can copy it anywhere and run it directly.
-
-### Option B: Install as Python package
+The executable is at `dist/ask-gemini` (~21MB). Or install as a Python package:
 
 ```bash
-cd ask-gemini
 pip install -e .
 ```
 
