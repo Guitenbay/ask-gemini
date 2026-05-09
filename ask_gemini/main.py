@@ -4,7 +4,12 @@ import sys
 import click
 from loguru import logger
 
-from ask_gemini.client import GeminiClientWrapper, _load_sessions, _save_sessions
+from ask_gemini.client import (
+    GeminiClientWrapper,
+    GeminiNetworkError,
+    _load_sessions,
+    _save_sessions,
+)
 from ask_gemini.config import GeminiCookies, RateLimitConfig
 
 logger.remove()
@@ -190,16 +195,20 @@ async def _run(client, prompt, model, stream):
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1) from e
 
-    if stream:
-        first = True
-        async for chunk in client.ask_stream(prompt, model):
-            if first:
-                first = False
-            click.echo(chunk, nl=False)
-        click.echo()
-    else:
-        resp = await client.ask(prompt, model)
-        click.echo(resp)
+    try:
+        if stream:
+            first = True
+            async for chunk in client.ask_stream(prompt, model):
+                if first:
+                    first = False
+                click.echo(chunk, nl=False)
+            click.echo()
+        else:
+            resp = await client.ask(prompt, model)
+            click.echo(resp)
+    except GeminiNetworkError as e:
+        click.echo(e.user_message(), err=True)
+        raise SystemExit(1) from e
 
 
 async def _run_session(client, name, prompt, model, stream):
@@ -216,16 +225,20 @@ async def _run_session(client, name, prompt, model, stream):
     else:
         logger.info(f"Created new session '{name}'")
 
-    if stream:
-        first = True
-        async for chunk in client.chat_stream(prompt, model):
-            if first:
-                first = False
-            click.echo(chunk, nl=False)
-        click.echo()
-    else:
-        resp = await client.chat(prompt, model)
-        click.echo(resp)
+    try:
+        if stream:
+            first = True
+            async for chunk in client.chat_stream(prompt, model):
+                if first:
+                    first = False
+                click.echo(chunk, nl=False)
+            click.echo()
+        else:
+            resp = await client.chat(prompt, model)
+            click.echo(resp)
+    except GeminiNetworkError as e:
+        click.echo(e.user_message(), err=True)
+        raise SystemExit(1) from e
 
     # Update the stored cid after the conversation was created
     if client._chat and client._chat.session.cid:
@@ -288,16 +301,19 @@ async def _run_chat(client, model, stream, new_chat=False):
 
         click.echo("Gemini> ", nl=False)
 
-        if stream:
-            first = True
-            async for chunk in client.chat_stream(text, model):
-                if first:
-                    first = False
-                click.echo(chunk, nl=False)
-            click.echo("\n")
-        else:
-            resp = await client.chat(text, model)
-            click.echo(f"{resp}\n")
+        try:
+            if stream:
+                first = True
+                async for chunk in client.chat_stream(text, model):
+                    if first:
+                        first = False
+                    click.echo(chunk, nl=False)
+                click.echo("\n")
+            else:
+                resp = await client.chat(text, model)
+                click.echo(f"{resp}\n")
+        except GeminiNetworkError as e:
+            click.echo(f"\n{e.user_message()}", err=True)
 
 
 if __name__ == "__main__":

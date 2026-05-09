@@ -1,6 +1,7 @@
 import asyncio
 import json
 import random
+import re
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -10,6 +11,50 @@ from loguru import logger
 from ask_gemini.config import GeminiCookies, ProxyConfig, RateLimitConfig
 
 SESSIONS_FILE = Path.home() / ".ask-gemini" / "sessions.json"
+
+# Patterns that indicate a network-level failure (not an API/logic error)
+_NETWORK_ERROR_PATTERNS = [
+    re.compile(r"connection reset", re.IGNORECASE),
+    re.compile(r"recv failure", re.IGNORECASE),
+    re.compile(r"ssl", re.IGNORECASE),
+    re.compile(r"broken pipe", re.IGNORECASE),
+    re.compile(r"timed out", re.IGNORECASE),
+]
+
+
+class GeminiNetworkError(Exception):
+    """Network-level error with user-friendly guidance."""
+
+    def __init__(self, original_error: Exception, context: str = ""):
+        self.original_error = original_error
+        self.context = context
+        super().__init__(self.user_message())
+
+    def user_message(self) -> str:
+        parts = []
+        parts.append("Connection to Gemini failed.")
+        parts.append("")
+        if not ProxyConfig.url:
+            parts.append("PROXY_URL is not configured.")
+            parts.append(
+                "  If you are in a region where Gemini is blocked, add PROXY_URL to your .env file."
+            )
+        else:
+            parts.append(f"PROXY_URL is set to: {ProxyConfig.url}")
+            parts.append("  Verify that the proxy is running and accessible.")
+        parts.append("")
+        parts.append("Other possible causes:")
+        parts.append("  - The message may be too large (try splitting it)")
+        parts.append("  - Cookies may have expired (refresh Gemini in your browser)")
+        if self.context:
+            parts.append("")
+            parts.append(self.context)
+        return "\n".join(parts)
+
+
+def _is_network_error(exc: Exception) -> bool:
+    err_str = str(exc).lower()
+    return any(p.search(err_str) for p in _NETWORK_ERROR_PATTERNS)
 
 
 class _ChatSession:
@@ -129,6 +174,15 @@ class GeminiClientWrapper:
     def has_chat(self) -> bool:
         return self._chat is not None
 
+    def _wrap_network_error(self, exc: Exception) -> GeminiNetworkError:
+        """Convert a raw network exception into a user-friendly GeminiNetworkError."""
+        if not _is_network_error(exc):
+            raise exc
+        context = ""
+        if self._chat and self._chat.session.cid:
+            context = f"Session cid={self._chat.session.cid} may be out of sync. If retry fails, try starting fresh."
+        return GeminiNetworkError(exc, context)
+
     async def chat(self, message: str, model: str) -> str:
         """Send a message in the active chat session."""
         if not self._chat:
@@ -137,7 +191,10 @@ class GeminiClientWrapper:
             await self.start_chat(model)
 
         await self._wait_before_send(message)
-        resp = await self._chat.session.send_message(message)
+        try:
+            resp = await self._chat.session.send_message(message)
+        except Exception as e:
+            raise self._wrap_network_error(e)
         # Save cid after first message so the session is registered on the web
         self._save_named_cid()
         await self._wait_after_receive()
@@ -151,15 +208,18 @@ class GeminiClientWrapper:
             await self.start_chat(model)
 
         await self._wait_before_send(message)
-        session = self._chat.session
-        first = True
-        async for chunk in session.send_message_stream(message):
-            if chunk.text_delta:
-                if first:
-                    # Save cid after first chunk
-                    self._save_named_cid()
-                    first = False
-                yield chunk.text_delta
+        try:
+            session = self._chat.session
+            first = True
+            async for chunk in session.send_message_stream(message):
+                if chunk.text_delta:
+                    if first:
+                        # Save cid after first chunk
+                        self._save_named_cid()
+                        first = False
+                    yield chunk.text_delta
+        except Exception as e:
+            raise self._wrap_network_error(e)
         await self._wait_after_receive()
 
     def _save_named_cid(self) -> None:
@@ -209,10 +269,13 @@ class GeminiClientWrapper:
             return resp.text
         except Exception as e:
             if await self._refresh_and_retry(e):
-                resp = await self._client.generate_content(message, model=model)
-                await self._wait_after_receive()
-                return resp.text
-            raise
+                try:
+                    resp = await self._client.generate_content(message, model=model)
+                    await self._wait_after_receive()
+                    return resp.text
+                except Exception as e2:
+                    raise self._wrap_network_error(e2)
+            raise self._wrap_network_error(e)
 
     async def ask_stream(self, message: str, model: str) -> AsyncIterator[str]:
         await self._wait_before_send(message)
@@ -225,11 +288,14 @@ class GeminiClientWrapper:
             await self._wait_after_receive()
         except Exception as e:
             if await self._refresh_and_retry(e):
-                async for chunk in self._client.generate_content_stream(
-                    message, model=model
-                ):
-                    if chunk.text_delta:
-                        yield chunk.text_delta
-                await self._wait_after_receive()
+                try:
+                    async for chunk in self._client.generate_content_stream(
+                        message, model=model
+                    ):
+                        if chunk.text_delta:
+                            yield chunk.text_delta
+                    await self._wait_after_receive()
+                except Exception as e2:
+                    raise self._wrap_network_error(e2)
             else:
-                raise
+                raise self._wrap_network_error(e)
