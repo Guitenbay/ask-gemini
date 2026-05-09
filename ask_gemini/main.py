@@ -44,11 +44,17 @@ DEFAULT_MODEL = "gemini-3-pro"
     "--chat",
     is_flag=True,
     default=False,
-    help="Enter interactive chat mode (remembers conversation history)",
+    help="Enter interactive chat mode (resumes your latest web conversation)",
+)
+@click.option(
+    "--new-chat",
+    is_flag=True,
+    default=False,
+    help="Start a fresh conversation instead of resuming the latest web chat",
 )
 @click.option("--cookie-setup", is_flag=True, help="Print cookie setup instructions")
 @click.version_option(version="0.1.0")
-def main(prompt, model, stream, no_stream, chat, cookie_setup):
+def main(prompt, model, stream, no_stream, chat, new_chat, cookie_setup):
     """Ask Gemini from the terminal."""
     if cookie_setup:
         print(GeminiCookies.setup_instructions())
@@ -73,7 +79,7 @@ def main(prompt, model, stream, no_stream, chat, cookie_setup):
     client = GeminiClientWrapper()
 
     if chat:
-        asyncio.run(_run_chat(client, model, stream))
+        asyncio.run(_run_chat(client, model, stream, new_chat=new_chat))
     elif prompt:
         asyncio.run(_run(client, prompt, model, stream))
     else:
@@ -102,18 +108,28 @@ async def _run(client, prompt, model, stream):
         click.echo(resp)
 
 
-async def _run_chat(client, model, stream):
+async def _run_chat(client, model, stream, new_chat=False):
     try:
         await client.init()
     except RuntimeError as e:
         click.echo(f"Error: {e}", err=True)
         raise SystemExit(1) from e
 
-    await client.start_chat(model)
-
-    click.echo(
-        f"Chat mode (model: {model}). Type 'exit' or 'quit' to leave, 'clear' to reset history.\n"
-    )
+    if new_chat:
+        await client.start_chat(model)
+        click.echo(
+            f"Chat mode (model: {model}). Type 'exit' or 'quit' to leave, 'clear' to reset history.\n"
+        )
+    else:
+        resumed = await client.resume_latest_chat(model)
+        if resumed:
+            click.echo(
+                f"Chat mode (model: {model}). Resuming web conversation. Type 'exit' to leave, 'clear' for new chat, 'new' to start fresh.\n"
+            )
+        else:
+            click.echo(
+                f"Chat mode (model: {model}). No existing web conversations found, starting fresh. Type 'exit' to leave.\n"
+            )
 
     try:
         import readline  # noqa: F401 — enables line editing/history on macOS/Linux
@@ -134,7 +150,12 @@ async def _run_chat(client, model, stream):
             break
         if text.lower() == "clear":
             await client.start_chat(model)
-            click.echo("Conversation cleared.\n")
+            click.echo("Started a new conversation.\n")
+            continue
+        if text.lower() == "new" and not new_chat:
+            await client.start_chat(model)
+            new_chat = True
+            click.echo("Started a new conversation.\n")
             continue
 
         click.echo("Gemini> ", nl=False)

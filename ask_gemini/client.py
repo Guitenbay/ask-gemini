@@ -34,10 +34,24 @@ class GeminiClientWrapper:
         logger.debug("Gemini client initialized")
 
     async def start_chat(self, model: str) -> None:
-        """Start or reset the chat session with the given model."""
+        """Start a fresh chat session."""
         chat = self._client.start_chat(model=model)
         self._chat = _ChatSession(chat, model)
-        logger.debug(f"Chat session started with model={model}")
+        logger.debug(f"New chat session started with model={model}")
+
+    async def resume_latest_chat(self, model: str) -> bool:
+        """Resume the most recent web-side conversation. Returns False if no existing chat found."""
+        recent = self._client.list_chats()
+        if not recent or len(recent) == 0:
+            logger.debug("No existing web chats found, starting fresh")
+            await self.start_chat(model)
+            return False
+
+        latest = recent[0]
+        chat = self._client.start_chat(model=model, cid=latest.cid)
+        self._chat = _ChatSession(chat, model)
+        logger.info(f"Resumed web chat '{latest.title}' (cid={latest.cid})")
+        return True
 
     def has_chat(self) -> bool:
         return self._chat is not None
