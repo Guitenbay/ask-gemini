@@ -15,5 +15,13 @@ dependencies = [
     "click>=8.0.0",
 ]
 
+[project.optional-dependencies]
+test = ["pytest>=7.0.0"]
+
 [project.scripts]
 ask-gemini = "ask_gemini.main:main"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests that call the real Gemini API (skipped on CI)",
+]
