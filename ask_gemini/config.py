@@ -73,3 +73,22 @@ Make sure you're logged into Gemini in Chrome or Edge.
 
 class ProxyConfig:
     url: str = _get("PROXY_URL")
+
+
+class RateLimitConfig:
+    """Human-like typing/cooldown delays to avoid triggering Google risk control."""
+
+    # Seconds per character of typed message (simulates human typing speed)
+    typing_speed: float = float(_get("TYPING_SPEED", "0.05"))  # ~20 chars/sec
+
+    # Min delay before sending (seconds), even for short messages
+    min_delay: float = float(_get("MIN_DELAY", "1.0"))
+
+    # Max delay before sending (seconds), caps the typing delay for long messages
+    max_delay: float = float(_get("MAX_DELAY", "5.0"))
+
+    # Cooldown after receiving a response before next request (seconds)
+    cooldown: float = float(_get("COOLDOWN", "2.0"))
+
+    # Whether rate limiting is enabled
+    enabled: bool = _get("RATE_LIMIT", "1") == "1"

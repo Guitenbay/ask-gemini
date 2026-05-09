@@ -121,6 +121,7 @@ Sessions are stored in `~/.ask-gemini/sessions.json` and map directly to convers
 | `--session <name>` | Use a named, isolated conversation session |
 | `--sessions` | List all saved named sessions |
 | `--rm-session <name>` | Delete a named session |
+| `--no-rate-limit` | Disable human-like typing/cooldown delays |
 | `--cookie-setup` | Print cookie setup instructions |
 | `--version` | Print version |
 
@@ -142,6 +143,26 @@ All configuration via environment variables in `.env` (project root or `~/.ask-g
 | `GEMINI_PSIDTS` | `__Secure-1PSIDTS` cookie | (auto-detect from browser) |
 | `PROXY_URL` | HTTP proxy URL | (empty) |
 | `MODEL` | Default model | `gemini-3-pro` |
+
+## Rate limiting
+
+By default, ask-gemini simulates human typing speed to avoid triggering Google's risk control:
+
+- **Typing delay**: `message_length × TYPING_SPEED` seconds, clamped between `MIN_DELAY` and `MAX_DELAY`
+- **Cooldown**: `COOLDOWN` seconds after receiving a response before the next request
+- **Jitter**: +/- 20% random variation so delays aren't perfectly uniform
+
+Configure in `.env`:
+
+| Variable | Description | Default |
+|---|---|---|
+| `RATE_LIMIT` | Enable/disable rate limiting (`1` or `0`) | `1` |
+| `TYPING_SPEED` | Seconds per character (≈ 20 chars/sec) | `0.05` |
+| `MIN_DELAY` | Minimum delay before sending (seconds) | `1.0` |
+| `MAX_DELAY` | Maximum delay cap (seconds) | `5.0` |
+| `COOLDOWN` | Seconds to wait after receiving a response | `2.0` |
+
+Or disable per-call with `--no-rate-limit`.
 
 ## Notes
 

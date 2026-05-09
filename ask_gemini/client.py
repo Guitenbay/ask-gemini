@@ -1,11 +1,13 @@
+import asyncio
 import json
+import random
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 from gemini_webapi import GeminiClient
 from loguru import logger
 
-from ask_gemini.config import GeminiCookies, ProxyConfig
+from ask_gemini.config import GeminiCookies, ProxyConfig, RateLimitConfig
 
 SESSIONS_FILE = Path.home() / ".ask-gemini" / "sessions.json"
 
@@ -34,9 +36,35 @@ def _save_sessions(sessions: dict[str, str]) -> None:
 
 
 class GeminiClientWrapper:
-    def __init__(self):
+    def __init__(self, rate_limit: bool = True):
         self._client: GeminiClient | None = None
         self._chat: _ChatSession | None = None
+        self._rate_limit = rate_limit
+
+    @staticmethod
+    def _typing_delay(message: str) -> float:
+        """Calculate a human-like delay based on message length."""
+        if not RateLimitConfig.enabled:
+            return 0
+        delay = len(message) * RateLimitConfig.typing_speed
+        delay = max(RateLimitConfig.min_delay, min(delay, RateLimitConfig.max_delay))
+        # Add +/- 20% jitter so delays aren't perfectly uniform
+        jitter = delay * 0.2 * (random.random() * 2 - 1)
+        return round(delay + jitter, 2)
+
+    async def _wait_before_send(self, message: str) -> None:
+        delay = self._typing_delay(message)
+        if delay > 0:
+            logger.debug(
+                f"Rate limit: waiting {delay}s before sending ({len(message)} chars)"
+            )
+            await asyncio.sleep(delay)
+
+    async def _wait_after_receive(self) -> None:
+        if not RateLimitConfig.enabled:
+            return
+        if RateLimitConfig.cooldown > 0:
+            await asyncio.sleep(RateLimitConfig.cooldown)
 
     async def init(self) -> None:
         if not GeminiCookies.is_configured():
@@ -108,9 +136,11 @@ class GeminiClientWrapper:
         elif self._chat.model != model:
             await self.start_chat(model)
 
+        await self._wait_before_send(message)
         resp = await self._chat.session.send_message(message)
         # Save cid after first message so the session is registered on the web
         self._save_named_cid()
+        await self._wait_after_receive()
         return resp.text
 
     async def chat_stream(self, message: str, model: str) -> AsyncIterator[str]:
@@ -120,6 +150,7 @@ class GeminiClientWrapper:
         elif self._chat.model != model:
             await self.start_chat(model)
 
+        await self._wait_before_send(message)
         session = self._chat.session
         first = True
         async for chunk in session.send_message_stream(message):
@@ -129,6 +160,7 @@ class GeminiClientWrapper:
                     self._save_named_cid()
                     first = False
                 yield chunk.text_delta
+        await self._wait_after_receive()
 
     def _save_named_cid(self) -> None:
         """Update the cid of the active chat in named sessions (if any)."""
@@ -163,22 +195,27 @@ class GeminiClientWrapper:
         return False
 
     async def ask(self, message: str, model: str) -> str:
+        await self._wait_before_send(message)
         try:
             resp = await self._client.generate_content(message, model=model)
+            await self._wait_after_receive()
             return resp.text
         except Exception as e:
             if await self._refresh_and_retry(e):
                 resp = await self._client.generate_content(message, model=model)
+                await self._wait_after_receive()
                 return resp.text
             raise
 
     async def ask_stream(self, message: str, model: str) -> AsyncIterator[str]:
+        await self._wait_before_send(message)
         try:
             async for chunk in self._client.generate_content_stream(
                 message, model=model
             ):
                 if chunk.text_delta:
                     yield chunk.text_delta
+            await self._wait_after_receive()
         except Exception as e:
             if await self._refresh_and_retry(e):
                 async for chunk in self._client.generate_content_stream(
@@ -186,5 +223,6 @@ class GeminiClientWrapper:
                 ):
                     if chunk.text_delta:
                         yield chunk.text_delta
+                await self._wait_after_receive()
             else:
                 raise

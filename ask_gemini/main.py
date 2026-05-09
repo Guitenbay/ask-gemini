@@ -5,7 +5,7 @@ import click
 from loguru import logger
 
 from ask_gemini.client import GeminiClientWrapper, _load_sessions, _save_sessions
-from ask_gemini.config import GeminiCookies
+from ask_gemini.config import GeminiCookies, RateLimitConfig
 
 logger.remove()
 logger.add(sys.stderr, level="WARNING", format="<level>{message}</level>")
@@ -69,6 +69,12 @@ DEFAULT_MODEL = "gemini-3-pro"
     default=False,
     help="Start a fresh conversation instead of resuming the latest web chat",
 )
+@click.option(
+    "--no-rate-limit",
+    is_flag=True,
+    default=False,
+    help="Disable human-like typing/cooldown delays",
+)
 @click.option("--cookie-setup", is_flag=True, help="Print cookie setup instructions")
 @click.version_option(version="0.1.0")
 def main(
@@ -81,6 +87,7 @@ def main(
     sessions,
     rm_session,
     new_chat,
+    no_rate_limit,
     cookie_setup,
 ):
     """Ask Gemini from the terminal."""
@@ -112,7 +119,15 @@ def main(
         click.echo(GeminiCookies.setup_instructions(), err=True)
         raise SystemExit(1)
 
-    client = GeminiClientWrapper()
+    rate_limit = not no_rate_limit
+    client = GeminiClientWrapper(rate_limit=rate_limit)
+
+    if rate_limit:
+        logger.info(
+            f"Rate limit enabled: typing={RateLimitConfig.typing_speed}s/char, "
+            f"min={RateLimitConfig.min_delay}s, max={RateLimitConfig.max_delay}s, "
+            f"cooldown={RateLimitConfig.cooldown}s"
+        )
 
     if session_name:
         asyncio.run(_run_session(client, session_name, prompt, model, stream))

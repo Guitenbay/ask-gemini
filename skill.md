@@ -69,6 +69,7 @@ ask-gemini --rm-session code-review
 | `--sessions` | List all named sessions |
 | `--rm-session <name>` | Delete a named session |
 | `--new-chat` | Start a fresh conversation (use with `--chat`) |
+| `--no-rate-limit` | Disable human-like typing/cooldown delays |
 | `--cookie-setup` | Show cookie setup instructions |
 
 ## Patterns for agents
@@ -122,6 +123,20 @@ ask-gemini --chat --new-chat <<< "Completely new topic: explain Docker networkin
 
 ```bash
 printf "My name is Alex\nWhat's my name?\nexit\n" | ask-gemini --chat -m gemini-3-flash
+```
+
+## Rate limiting
+
+Rate limiting is **enabled by default** to mimic human typing speed and avoid triggering Google risk control:
+
+- Before each message: a delay proportional to message length (simulates typing)
+- After each response: a cooldown delay (simulates reading time)
+- Delays include +/- 20% random jitter
+
+When making many rapid API calls in a loop, use `--no-rate-limit` to skip delays:
+
+```bash
+ask-gemini --no-rate-limit --session batch-1 "Quick question"
 ```
 
 ## Setup requirements
