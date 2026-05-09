@@ -145,7 +145,7 @@ def test_list_sessions_has_entry():
 
 
 def test_delete_session():
-    """Deleting a session should remove it."""
+    """Deleting a session should remove it locally and from Gemini web."""
     session = f"{TEST_SESSION_PREFIX}delete-test"
     _run("--session", session, "Hi")
 
@@ -175,7 +175,9 @@ def test_delete_nonexistent_session():
 def test_chat_mode_stdin():
     """Chat mode should work with piped stdin."""
     result = _run(
-        "--chat", "-m", "gemini-3-flash",
+        "--chat",
+        "-m",
+        "gemini-3-flash",
         input="I am a test user. Type 'exit'.\nexit\n",
     )
     assert result.returncode == 0, f"Chat mode failed: {result.stderr}"

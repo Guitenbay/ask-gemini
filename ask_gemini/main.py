@@ -100,7 +100,7 @@ def main(
         return
 
     if rm_session:
-        _remove_session(rm_session)
+        asyncio.run(_remove_session(rm_session))
         return
 
     if no_stream:
@@ -154,15 +154,29 @@ def _list_sessions():
         click.echo(f"  {name:20s}  cid: {cid}")
 
 
-def _remove_session(name: str):
-    """Delete a named session."""
+async def _remove_session(name: str):
+    """Delete a named session locally and from Gemini web."""
     sessions = _load_sessions()
-    if name in sessions:
-        del sessions[name]
-        _save_sessions(sessions)
-        click.echo(f"Deleted session '{name}'.")
-    else:
+    if name not in sessions:
         click.echo(f"Session '{name}' not found.")
+        return
+
+    cid = sessions[name]
+    del sessions[name]
+    _save_sessions(sessions)
+
+    # Also delete the conversation from Gemini web
+    GeminiCookies.try_load_from_browser()
+    client = GeminiClientWrapper(rate_limit=False)
+    try:
+        await client.init()
+        await client.delete_chat(cid)
+        click.echo(f"Deleted session '{name}' from disk and Gemini web.")
+    except Exception as e:
+        click.echo(
+            f"Deleted local session '{name}', but failed to delete from Gemini web: {e}",
+            err=True,
+        )
 
 
 async def _run(client, prompt, model, stream):

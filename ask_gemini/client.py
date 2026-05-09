@@ -194,6 +194,13 @@ class GeminiClientWrapper:
                     pass
         return False
 
+    async def delete_chat(self, cid: str) -> None:
+        """Delete a conversation from Gemini web (both local and server-side)."""
+        if not self._client:
+            raise RuntimeError("GeminiProvider not initialized")
+        await self._client.delete_chat(cid)
+        logger.info(f"Deleted web chat cid={cid}")
+
     async def ask(self, message: str, model: str) -> str:
         await self._wait_before_send(message)
         try:
