@@ -85,6 +85,30 @@ ask-gemini --chat --new-chat
 - Multiple CLI sessions in a row will keep using the same web conversation
 - Switching models in an existing chat starts a new session on the web side
 
+### Named sessions
+
+Create isolated conversations that don't interfere with each other. Perfect for multiple agents working on different tasks:
+
+```bash
+# Create or resume a named session
+ask-gemini --session code-review "Analyze this code: $(cat app.py)"
+
+# Follow-up — Gemini remembers the code review context
+ask-gemini --session code-review "Now rewrite it with better error handling"
+
+# A completely separate session
+ask-gemini --session data-analysis "What is SQL?"
+```
+
+Manage your sessions:
+
+```bash
+ask-gemini --sessions                # List all saved sessions
+ask-gemini --rm-session code-review  # Delete a session
+```
+
+Sessions are stored in `~/.ask-gemini/sessions.json` and map directly to conversations on `gemini.google.com`.
+
 ## Options
 
 | Option | Description |
@@ -94,6 +118,9 @@ ask-gemini --chat --new-chat
 | `--no-stream` | Wait for full response before printing |
 | `--chat` | Enter interactive chat mode (resumes web conversation) |
 | `--new-chat` | Start a fresh conversation instead of resuming |
+| `--session <name>` | Use a named, isolated conversation session |
+| `--sessions` | List all saved named sessions |
+| `--rm-session <name>` | Delete a named session |
 | `--cookie-setup` | Print cookie setup instructions |
 | `--version` | Print version |
 
