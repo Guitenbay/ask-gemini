@@ -4,7 +4,7 @@ import sys
 import click
 from loguru import logger
 
-from ask_gemini.client import GeminiClientWrapper
+from ask_gemini.client import GeminiClientWrapper, _load_sessions, _save_sessions
 from ask_gemini.config import GeminiCookies
 
 logger.remove()
@@ -47,6 +47,23 @@ DEFAULT_MODEL = "gemini-3-pro"
     help="Enter interactive chat mode (resumes your latest web conversation)",
 )
 @click.option(
+    "--session",
+    "session_name",
+    default=None,
+    help="Use a named conversation session (creates one if it doesn't exist)",
+)
+@click.option(
+    "--sessions",
+    is_flag=True,
+    default=False,
+    help="List all named sessions",
+)
+@click.option(
+    "--rm-session",
+    default=None,
+    help="Delete a named session",
+)
+@click.option(
     "--new-chat",
     is_flag=True,
     default=False,
@@ -54,10 +71,29 @@ DEFAULT_MODEL = "gemini-3-pro"
 )
 @click.option("--cookie-setup", is_flag=True, help="Print cookie setup instructions")
 @click.version_option(version="0.1.0")
-def main(prompt, model, stream, no_stream, chat, new_chat, cookie_setup):
+def main(
+    prompt,
+    model,
+    stream,
+    no_stream,
+    chat,
+    session_name,
+    sessions,
+    rm_session,
+    new_chat,
+    cookie_setup,
+):
     """Ask Gemini from the terminal."""
     if cookie_setup:
         print(GeminiCookies.setup_instructions())
+        return
+
+    if sessions:
+        _list_sessions()
+        return
+
+    if rm_session:
+        _remove_session(rm_session)
         return
 
     if no_stream:
@@ -78,15 +114,40 @@ def main(prompt, model, stream, no_stream, chat, new_chat, cookie_setup):
 
     client = GeminiClientWrapper()
 
-    if chat:
+    if session_name:
+        asyncio.run(_run_session(client, session_name, prompt, model, stream))
+    elif chat:
         asyncio.run(_run_chat(client, model, stream, new_chat=new_chat))
     elif prompt:
         asyncio.run(_run(client, prompt, model, stream))
     else:
         click.echo("Usage: ask-gemini <your question>")
-        click.echo("  ask-gemini --chat          Interactive chat mode")
-        click.echo("  ask-gemini --help           Show all options")
+        click.echo("  ask-gemini --chat              Interactive chat mode")
+        click.echo("  ask-gemini --session <name>    Use a named session")
+        click.echo("  ask-gemini --sessions          List saved sessions")
+        click.echo("  ask-gemini --help              Show all options")
         raise SystemExit(0)
+
+
+def _list_sessions():
+    """List all named sessions."""
+    sessions = _load_sessions()
+    if not sessions:
+        click.echo("No named sessions.")
+        return
+    for name, cid in sessions.items():
+        click.echo(f"  {name:20s}  cid: {cid}")
+
+
+def _remove_session(name: str):
+    """Delete a named session."""
+    sessions = _load_sessions()
+    if name in sessions:
+        del sessions[name]
+        _save_sessions(sessions)
+        click.echo(f"Deleted session '{name}'.")
+    else:
+        click.echo(f"Session '{name}' not found.")
 
 
 async def _run(client, prompt, model, stream):
@@ -108,6 +169,38 @@ async def _run(client, prompt, model, stream):
         click.echo(resp)
 
 
+async def _run_session(client, name, prompt, model, stream):
+    """Named session: auto-create or resume, then send one message."""
+    try:
+        await client.init()
+    except RuntimeError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1) from e
+
+    existed = await client.resume_named_session(name, model)
+    if existed:
+        logger.info(f"Using existing session '{name}'")
+    else:
+        logger.info(f"Created new session '{name}'")
+
+    if stream:
+        first = True
+        async for chunk in client.chat_stream(prompt, model):
+            if first:
+                first = False
+            click.echo(chunk, nl=False)
+        click.echo()
+    else:
+        resp = await client.chat(prompt, model)
+        click.echo(resp)
+
+    # Update the stored cid after the conversation was created
+    if client._chat and client._chat.session.cid:
+        sessions = _load_sessions()
+        sessions[name] = client._chat.session.cid
+        _save_sessions(sessions)
+
+
 async def _run_chat(client, model, stream, new_chat=False):
     try:
         await client.init()
@@ -124,11 +217,13 @@ async def _run_chat(client, model, stream, new_chat=False):
         resumed = await client.resume_latest_chat(model)
         if resumed:
             click.echo(
-                f"Chat mode (model: {model}). Resuming web conversation. Type 'exit' to leave, 'clear' for new chat, 'new' to start fresh.\n"
+                f"Chat mode (model: {model}). Resuming web conversation. "
+                f"Type 'exit' to leave, 'clear' for new chat, 'new' to start fresh.\n"
             )
         else:
             click.echo(
-                f"Chat mode (model: {model}). No existing web conversations found, starting fresh. Type 'exit' to leave.\n"
+                f"Chat mode (model: {model}). No existing web conversations found, "
+                f"starting fresh. Type 'exit' to leave.\n"
             )
 
     try:
