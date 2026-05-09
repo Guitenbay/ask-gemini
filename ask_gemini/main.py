@@ -103,6 +103,10 @@ def main(
         asyncio.run(_remove_session(rm_session))
         return
 
+    # Read prompt from stdin if not provided and input is piped
+    if prompt is None and not sys.stdin.isatty():
+        prompt = sys.stdin.read().strip()
+
     if no_stream:
         stream = False
 
