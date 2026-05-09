@@ -132,8 +132,27 @@ class GeminiClientWrapper:
         logger.debug(f"New chat session started with model={model}")
 
     async def resume_chat(self, cid: str, model: str) -> None:
-        """Resume a specific web-side conversation by its cid."""
+        """Resume a specific web-side conversation by its cid.
+
+        Fetches history from the server to recover rid/rcid, which are
+        required for the server to correctly continue the conversation.
+        Without rid/rcid, only cid is sent and the server may treat the
+        next message as a new conversation.
+        """
         chat = self._client.start_chat(model=model, cid=cid)
+        # Fetch history to recover rid/rcid
+        history = await chat.read_history(limit=5)
+        if history and history.turns:
+            for turn in history.turns:  # newest-first
+                if turn.role == "model" and turn.model_output:
+                    if turn.model_output.metadata:
+                        chat.metadata = turn.model_output.metadata
+                    if turn.model_output.rcid:
+                        chat.rcid = turn.model_output.rcid
+                    break
+            logger.debug(f"Recovered rid/rcid for cid={cid}")
+        else:
+            logger.debug(f"No history turns for cid={cid}, resuming with cid only")
         self._chat = _ChatSession(chat, model)
         logger.info(f"Resumed web chat cid={cid}")
 
@@ -147,6 +166,17 @@ class GeminiClientWrapper:
 
         latest = recent[0]
         chat = self._client.start_chat(model=model, cid=latest.cid)
+        # Fetch history to recover rid/rcid
+        history = await chat.read_history(limit=5)
+        if history and history.turns:
+            for turn in history.turns:  # newest-first
+                if turn.role == "model" and turn.model_output:
+                    if turn.model_output.metadata:
+                        chat.metadata = turn.model_output.metadata
+                    if turn.model_output.rcid:
+                        chat.rcid = turn.model_output.rcid
+                    break
+            logger.debug(f"Recovered rid/rcid for cid={latest.cid}")
         self._chat = _ChatSession(chat, model)
         logger.info(f"Resumed web chat '{latest.title}' (cid={latest.cid})")
         return True
