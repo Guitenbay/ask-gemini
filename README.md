@@ -7,6 +7,9 @@
 
 CLI tool to chat with Gemini's web interface from the terminal. No API key needed — uses your browser cookies.
 
+> **For agents**: See [SKILL.md](SKILL.md) for agent usage patterns and best practices.
+> Quick install: `pip install ask-gemini` (PyPI) or download from [GitHub Releases](https://github.com/Guitenbay/ask-gemini/releases).
+
 ## Setup
 
 ### Option A: Install via pip (recommended)
