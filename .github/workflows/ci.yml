@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint
+        run: ruff check ask_gemini/
+
+      - name: Check formatting
+        run: ruff format --check ask_gemini/
+
+  build-package:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build package
+        run: pip install build && python -m build
+
+      - name: Verify install
+        run: pip install dist/*.whl && ask-gemini --help
+
+  build-executable:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e . pyinstaller
+
+      - name: Build executable
+        run: bash build.sh
+
+      - name: Verify executable
+        run: ./dist/ask-gemini --help
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ask-gemini-macos
+          path: dist/ask-gemini
+          retention-days: 14
