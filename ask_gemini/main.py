@@ -81,7 +81,7 @@ DEFAULT_MODEL = "gemini-3-pro"
     help="Disable human-like typing/cooldown delays",
 )
 @click.option("--cookie-setup", is_flag=True, help="Print cookie setup instructions")
-@click.version_option(version="0.2.0")
+@click.version_option(version="0.2.1")
 def main(
     prompt,
     model,
