@@ -124,7 +124,9 @@ def cleanup():
 
 def test_single_question():
     """Basic single question should return a response."""
-    result = _run("-m", "gemini-3-flash", "What is 1+1? Please answer with just the number.")
+    result = _run(
+        "-m", "gemini-3-flash", "What is 1+1? Please answer with just the number."
+    )
     assert result.returncode == 0, f"CLI failed: {result.stderr}"
     assert "2" in result.stdout
 
@@ -138,7 +140,9 @@ def test_single_question_model_flag():
 
 def test_single_question_no_stream():
     """Non-streaming mode should return a complete response."""
-    result = _run("--no-stream", "-m", "gemini-3-flash", "Say 'hello world' and nothing else.")
+    result = _run(
+        "--no-stream", "-m", "gemini-3-flash", "Say 'hello world' and nothing else."
+    )
     assert result.returncode == 0, f"CLI failed: {result.stderr}"
     assert "hello" in result.stdout.lower() or "world" in result.stdout.lower()
 
@@ -149,7 +153,9 @@ def test_single_question_no_stream():
 def test_named_session_create():
     """Creating a named session should work."""
     session = f"{TEST_SESSION_PREFIX}create-test"
-    result = _run("-m", "gemini-3-flash", "--session", session, "Say 'session created' and stop.")
+    result = _run(
+        "-m", "gemini-3-flash", "--session", session, "Say 'session created' and stop."
+    )
     assert result.returncode == 0, f"CLI failed: {result.stderr}"
     assert "created" in result.stdout.lower()
 
@@ -159,11 +165,19 @@ def test_named_session_context_memory():
     session = f"{TEST_SESSION_PREFIX}memory-test"
 
     # First call: establish context
-    result1 = _run("-m", "gemini-3-flash", "--session", session, "My secret word is BLOOM. Remember it.")
+    result1 = _run(
+        "-m",
+        "gemini-3-flash",
+        "--session",
+        session,
+        "My secret word is BLOOM. Remember it.",
+    )
     assert result1.returncode == 0, f"First call failed: {result1.stderr}"
 
     # Second call: ask about the context
-    result2 = _run("-m", "gemini-3-flash", "--session", session, "What was my secret word?")
+    result2 = _run(
+        "-m", "gemini-3-flash", "--session", session, "What was my secret word?"
+    )
     assert result2.returncode == 0, f"Second call failed: {result2.stderr}"
     assert "bloom" in result2.stdout.lower(), (
         f"Context not remembered. Response: {result2.stdout}"
@@ -176,12 +190,20 @@ def test_named_session_isolation():
     session_b = f"{TEST_SESSION_PREFIX}isolation-b"
 
     # Set different contexts
-    _run("-m", "gemini-3-flash", "--session", session_a, "My color is RED. Remember it.")
-    _run("-m", "gemini-3-flash", "--session", session_b, "My color is BLUE. Remember it.")
+    _run(
+        "-m", "gemini-3-flash", "--session", session_a, "My color is RED. Remember it."
+    )
+    _run(
+        "-m", "gemini-3-flash", "--session", session_b, "My color is BLUE. Remember it."
+    )
 
     # Ask each session — they should give different answers
-    result_a = _run("-m", "gemini-3-flash", "--session", session_a, "What color did I say?")
-    result_b = _run("-m", "gemini-3-flash", "--session", session_b, "What color did I say?")
+    result_a = _run(
+        "-m", "gemini-3-flash", "--session", session_a, "What color did I say?"
+    )
+    result_b = _run(
+        "-m", "gemini-3-flash", "--session", session_b, "What color did I say?"
+    )
 
     assert "red" in result_a.stdout.lower(), (
         f"Session A lost context. Response: {result_a.stdout}"
@@ -264,7 +286,9 @@ def test_chat_mode_stdin():
 
 def test_stdin_pipe_input():
     """When stdin is piped, use it as the prompt."""
-    result = _run("-m", "gemini-3-flash", input="What is 2+2? Reply with just the number.")
+    result = _run(
+        "-m", "gemini-3-flash", input="What is 2+2? Reply with just the number."
+    )
     assert result.returncode == 0, f"CLI failed: {result.stderr}"
     assert "4" in result.stdout
 
@@ -272,10 +296,18 @@ def test_stdin_pipe_input():
 def test_stdin_pipe_with_session():
     """Stdin pipe with a named session should work."""
     session = f"{TEST_SESSION_PREFIX}stdin-session"
-    result1 = _run("-m", "gemini-3-flash", "--session", session, input="My test word is PEAR. Remember it.")
+    result1 = _run(
+        "-m",
+        "gemini-3-flash",
+        "--session",
+        session,
+        input="My test word is PEAR. Remember it.",
+    )
     assert result1.returncode == 0, f"First call failed: {result1.stderr}"
 
-    result2 = _run("-m", "gemini-3-flash", "--session", session, input="What was my test word?")
+    result2 = _run(
+        "-m", "gemini-3-flash", "--session", session, input="What was my test word?"
+    )
     assert result2.returncode == 0, f"Second call failed: {result2.stderr}"
     assert "pear" in result2.stdout.lower(), (
         f"Context not remembered. Response: {result2.stdout}"
