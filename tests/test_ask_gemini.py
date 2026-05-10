@@ -13,7 +13,9 @@ TEST_SESSION_PREFIX = "_test_"
 pytestmark = pytest.mark.integration
 
 
-def _run(*args, timeout: int = 120) -> subprocess.CompletedProcess:
+def _run(
+    *args, timeout: int = 120, input: str | None = None
+) -> subprocess.CompletedProcess:
     """Run the ask-gemini CLI and return the result."""
     env = os.environ.copy()
     return subprocess.run(
@@ -22,6 +24,7 @@ def _run(*args, timeout: int = 120) -> subprocess.CompletedProcess:
         text=True,
         timeout=timeout,
         env=env,
+        input=input,
     )
 
 
@@ -128,11 +131,12 @@ def test_named_session_isolation():
 
 
 def test_list_sessions_empty():
-    """Listing sessions when none exist should show empty message."""
+    """Listing sessions should not show any test sessions when none created."""
     _clean_test_sessions()
     result = _run("--sessions")
     assert result.returncode == 0
-    assert "no named" in result.stdout.lower() or not result.stdout.strip()
+    # No test-prefixed sessions should appear (non-test sessions from user may exist)
+    assert TEST_SESSION_PREFIX not in result.stdout
 
 
 def test_list_sessions_has_entry():
